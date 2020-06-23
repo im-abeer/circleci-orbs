@@ -1,0 +1,113 @@
+description:
+  Installs AWS CLI and initializes AWS Credentials
+
+parameters:
+
+  skip-install-check:
+    type: boolean
+    default: false
+    description: |
+      Set to true to skip checking for existing installations before installing.
+
+  aws-access-key-id:
+    type: env_var_name
+    default: AWS_ACCESS_KEY_ID
+    description: |
+      AWS access key id for IAM role. Set this to the name of
+      the environment variable you will use to hold this
+      value, i.e. AWS_ACCESS_KEY.
+
+  aws-secret-access-key:
+    type: env_var_name
+    default: AWS_SECRET_ACCESS_KEY
+    description: |
+      AWS secret key for IAM role. Set this to the name of
+      the environment variable you will use to hold this
+      value, i.e. AWS_SECRET_ACCESS_KEY.
+
+  aws-region-key:
+    type: env_var_name
+    default: AWS_REGION
+    description: |
+      Environment variable of AWS region to operate in
+      (defaults to AWS_REGION)
+
+  profile-name:
+    type: string
+    default: default
+    description: AWS Profile name to be configured.
+
+
+steps:
+
+  - run:
+      name: Install AWS CLI
+      command: |
+
+        if [ "<<parameters.skip-install-check>>" == "false" ] && which aws > /dev/null; then
+          echo "The AWS CLI is already installed. Skipping."
+          exit 0
+        fi
+
+        if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+
+        cd /tmp || exit
+
+        # PLATFORM CHECK: mac vs. alpine vs. other linux
+        if uname -a | grep Darwin; then
+          SYS_ENV_PLATFORM=darwin
+        elif uname -a | grep Linux; then
+          SYS_ENV_PLATFORM=linux
+        else
+          echo "This platform appears to be unsupported."
+          uname -a
+          exit 1
+        fi
+
+        case $SYS_ENV_PLATFORM in
+          linux)
+            curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            $SUDO ./aws/install
+            rm awscliv2.zip
+            ;;
+          darwin)
+            curl -sSL "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+            $SUDO installer -pkg AWSCLIV2.pkg -target /
+            rm AWSCLIV2.pkg
+            ;;
+          *)
+            echo "This orb does not currently support your platform. If you believe it should, please consider opening an issue on the GitHub repository:"
+            echo "https://github.com/CircleCI-Public/aws-cli-orb/issues/new"
+            exit 1
+        esac
+
+        # Installation check
+
+        if aws --version &> grep -q "aws-cli/2"; then
+          echo "AWS CLI V2 has been installed successfully"
+          exit 0
+        else
+          echo "There was an issue installing the AWS CLI V2. Exiting."
+          exit 1
+        fi
+
+  - run:
+      name: Configure AWS Access Key ID
+      command: |
+        aws configure set aws_access_key_id \
+          $<<parameters.aws-access-key-id>> \
+          --profile <<parameters.profile-name>>
+
+  - run:
+      name: Configure AWS Secret Access Key
+      command: |
+        aws configure set aws_secret_access_key \
+          $<<parameters.aws-secret-access-key>> \
+          --profile <<parameters.profile-name>>
+
+  - run:
+      name: Configure AWS Region
+      command: |
+        aws configure set region $<<parameters.aws-region-key>> \
+          --profile <<parameters.profile-name>>

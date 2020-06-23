@@ -1,0 +1,4 @@
+version: 2.1
+
+description: >
+  Commonly used AWS operations in CircleCI workflow

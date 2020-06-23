@@ -1,0 +1,48 @@
+version: 2.1
+
+orbs:
+  orb-tools: circleci/orb-tools@9.1.0
+
+jobs:
+
+  orb-publish-prod:
+    executor: orb-tools/alpine
+    steps:
+      - run:
+          name:
+          command: |
+            export VERSION=`echo $CIRCLE_TAG | awk -F@ '{print $2}'`
+            echo "echo VERSION=$VERSION" >> $BASH_ENV
+      - orb-tools/publish:
+          orb-ref: im-abeer/aws@${VERSION}
+
+workflows:
+
+  build-and-deploy:
+    jobs:
+      - orb-tools/lint
+      - orb-tools/pack:
+          requires:
+            - orb-tools/lint
+
+      - orb-tools/publish-dev:
+          # release dev version of orb, for testing & possible publishing.
+          # orb will be published as dev:alpha and dev:${CIRCLE_SHA1:0:7}.
+          orb-name: im-abeer/aws
+          context: orb-publisher # CIRCLE_TOKEN
+          requires:
+            - orb-tools/pack
+          filters:
+            branches:
+              only: aws/master
+
+      - orb-publish-prod:
+          context: orb-publisher
+          requires:
+            - orb-tools/pack
+          filters:
+            tags:
+              only: /^aws\/v(\d+\.\d+\.\d+)/
+            branches:
+              ignore: /.*/
+
